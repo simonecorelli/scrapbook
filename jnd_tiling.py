@@ -196,11 +196,12 @@ def locus_path():
 # Testo auto-scalato nell'esagono (punta in alto, testo ruotato 90°)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def add_labels(ax, cx, cy, name, xy_str, fill_rgb):
+def add_labels(ax, cx, cy, name, fill_rgb):
     """
-    Due righe centrate nell'esagono, ruotate 90°.
-    Font auto-dimensionato per riempire l'asse lungo (verticale = 2·r).
-    Riga 1 (nome) sopra il centro, riga 2 (xy) sotto.
+    Due righe nell'esagono:
+    - Nome: ruotato 90°, metà superiore (usa l'asse lungo).
+    - Coordinate xy: ORIZZONTALI, metà inferiore (usa la larghezza piena).
+    Approccio separato perché testo ruotato a font piccolo risulta invisibile in PDF.
     """
     fig = ax.figure
     aw = fig.get_figwidth()  * ax.get_position().width
@@ -209,30 +210,39 @@ def add_labels(ax, cx, cy, name, xy_str, fill_rgb):
     sx = aw/(x1-x0); sy = ah/(y1-y0)          # pollici per unità dati
 
     # Dimensioni esagono punta-in-alto in pollici
-    h_tall = 2*HEX_R*sy                        # asse lungo (verticale): testo scorre qui
-    h_wide = HEX_R*np.sqrt(3)*sx               # asse corto (orizzontale): altezza font
+    h_tall = 2*HEX_R*sy           # asse lungo (verticale)
+    h_wide = HEX_R*np.sqrt(3)*sx  # asse corto (orizzontale = larghezza massima)
 
-    W = 0.52   # rapporto larghezza/altezza carattere (font monospace ~0.6, prop ~0.52)
+    W = 0.52   # rapporto larghezza/altezza carattere
 
-    def fit(text, long_frac, short_frac, min_pt):
-        n = max(len(text), 1)
-        f_len  = h_tall * long_frac  * 72 / (n * W)
-        f_hgt  = h_wide * short_frac * 72
-        return float(np.clip(min(f_len, f_hgt), min_pt, 15.0))
+    # — Nome colore: ruotato 90°, parte superiore —
+    n1 = max(len(name), 1)
+    fs1 = float(np.clip(min(
+        h_tall * 0.50 * 72 / (n1 * W),   # la stringa deve stare nell'asse lungo
+        h_wide * 0.36 * 72               # il font non supera la larghezza
+    ), 6.0, 14.0))
 
-    # Coordinate in formato compatto "0.xx, 0.yy" (2 decimali, meno caratteri)
-    xy_str2 = f"{cx:.2f}, {cy:.2f}"
-
-    fs1 = fit(name,    0.50, 0.40, 6.0)   # nome: min 6pt
-    fs2 = fit(xy_str2, 0.46, 0.30, 5.0)   # coord: min 5pt
+    # — Coordinate xy: ORIZZONTALI, parte inferiore —
+    # Senza spazio dopo virgola per ridurre i caratteri ("0.48,0.36" = 9 car.)
+    xy_lbl = f"{cx:.2f},{cy:.2f}"
+    n2 = max(len(xy_lbl), 1)
+    fs2 = float(np.clip(min(
+        h_wide * 0.80 * 72 / (n2 * W),   # stringa orizzontale entro la larghezza
+        h_tall * 0.22 * 72               # font non supera un quinto dell'altezza
+    ), 5.5, 10.0))
 
     lum = 0.299*fill_rgb[0] + 0.587*fill_rgb[1] + 0.114*fill_rgb[2]
     tc = 'white' if lum < 0.46 else 'black'
 
-    off = HEX_R * 0.36   # offset verticale — abbastanza da separare le due righe
-    kw = dict(ha='center', va='center', rotation=90, zorder=4, clip_on=False)
-    ax.text(cx, cy+off, name,    fontsize=fs1, fontweight='bold', color=tc, **kw)
-    ax.text(cx, cy-off, xy_str2, fontsize=fs2, color=tc, **kw)
+    # Nome: centro spostato verso l'alto
+    ax.text(cx, cy + HEX_R * 0.20, name,
+            fontsize=fs1, fontweight='bold', color=tc,
+            ha='center', va='center', rotation=90, zorder=4, clip_on=False)
+
+    # Coordinate: orizzontali, spostate verso il basso
+    ax.text(cx, cy - HEX_R * 0.50, xy_lbl,
+            fontsize=fs2, color=tc,
+            ha='center', va='center', rotation=0, zorder=4, clip_on=False)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -272,7 +282,6 @@ def draw(ax, title, gamut_poly, gamut_label, gamut_color):
         name   = name_from_xyY(x, y, Y)
         rgb    = xyY_to_display(x, y, Y, gamut_poly)
         in_g   = point_in_poly((x, y), gamut_poly[:-1])
-        xy_str = f"{x:.3f}, {y:.3f}"   # coordinate compatte
 
         patch = RegularPolygon(
             (x, y), numVertices=6, radius=HEX_R,
@@ -284,7 +293,7 @@ def draw(ax, title, gamut_poly, gamut_label, gamut_color):
             zorder=3,
         )
         ax.add_patch(patch)
-        add_labels(ax, x, y, name, xy_str, rgb)
+        add_labels(ax, x, y, name, rgb)
 
     ax.set_xlim(-0.06, 0.84)
     ax.set_ylim(-0.06, 0.94)
