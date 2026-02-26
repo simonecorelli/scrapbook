@@ -43,46 +43,53 @@ FOGRA39_POLY = np.array([
 # ── Punti campione in CIE xyY ─────────────────────────────────────────────────
 #  Il nome verrà calcolato automaticamente dalla posizione.
 #  Y (luminanza relativa, 0-1) influenza sia il nome sia il colore reso.
-SAMPLES = [          # x,      y,     Y
-    (0.620, 0.318, 0.21),  # rosso saturo
-    (0.570, 0.345, 0.30),  # rosso-arancio
-    (0.540, 0.390, 0.42),  # arancione
-    (0.490, 0.355, 0.08),  # marrone  ← bassa Y!
-    (0.430, 0.490, 0.93),  # giallo
-    (0.350, 0.558, 0.70),  # giallo-verde
-    (0.210, 0.720, 0.50),  # verde puro ~520nm
-    (0.155, 0.430, 0.42),  # verde acqua / teal
-    (0.085, 0.338, 0.50),  # ciano ~490nm
-    (0.178, 0.212, 0.22),  # azzurro
-    (0.155, 0.065, 0.07),  # blu ~460nm
-    (0.220, 0.075, 0.04),  # viola
-    (0.310, 0.148, 0.08),  # porpora
-    (0.382, 0.196, 0.18),  # magenta
-    (0.410, 0.268, 0.38),  # rosa
+# Posizioni scelte in modo che nessun esagono si sovrapponga:
+# distanza minima tra centri > 2·HEX_R·cos(30°) ≈ 0.087
+# Il nome viene calcolato automaticamente da xyY → Lab → LCh.
+# I colori FUORI dal gamut P3/Fogra39 vengono nominati ugualmente —
+# il gamut influenza solo il colore reso (grigiatura), non il nome.
+SAMPLES = [     # x,      y,      Y
+    (0.618, 0.316, 0.21),  # rosso saturo
+    (0.562, 0.408, 0.42),  # arancione
+    (0.478, 0.358, 0.08),  # marrone  ← Y bassa = marrone, non arancione!
+    (0.430, 0.490, 0.93),  # giallo   (h≈92° in LCh)
+    (0.348, 0.555, 0.70),  # giallo-verde
+    (0.210, 0.720, 0.50),  # verde ~520nm
+    (0.155, 0.430, 0.42),  # verde acqua
+    (0.083, 0.338, 0.50),  # ciano ~490nm
+    (0.175, 0.210, 0.22),  # azzurro
+    (0.148, 0.055, 0.07),  # blu ~460nm
+    (0.230, 0.083, 0.04),  # viola
+    (0.305, 0.140, 0.08),  # porpora
+    (0.380, 0.185, 0.18),  # magenta
+    (0.418, 0.280, 0.38),  # rosa
     (0.313, 0.329, 1.00),  # bianco D65
 ]
 
-HEX_R = 0.040    # raggio esagono in unità xy (orientamento: punta in alto)
+HEX_R = 0.050   # raggio esagono — più grande per testo leggibile
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Naming automatico: xyY → Lab → LCh → nome italiano
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Soglie hue angle (°) → nome colore (CIE LCh, illuminante D65)
+# Soglie hue angle (°) → nome colore (CIE LCh D65)
+# Calibrate sui colori sRGB primari:
+#   Rosso puro ≈ 40°, Giallo ≈ 103°, Verde ≈ 136°,
+#   Ciano ≈ 196°, Blu puro ≈ 306°, Magenta ≈ 328°
 _HUE_NAMES = [
-    (22,  "Rosso-Viola"),
-    (42,  "Rosso"),
-    (72,  "Arancione"),
-    (93,  "Gial.-Arancio"),
-    (109, "Giallo"),
-    (140, "Verde-Giallo"),
-    (185, "Verde"),
-    (222, "Ciano"),
-    (262, "Blu"),
-    (295, "Viola"),
-    (332, "Magenta"),
-    (360, "Rosso-Viola"),
+    (22,  "Rosso-Viola"),   #   0– 22°
+    (48,  "Rosso"),          #  22– 48°
+    (72,  "Arancione"),      #  48– 72°
+    (98,  "Giallo"),         #  72– 98°  (include giallo-arancio)
+    (135, "Verde-Giallo"),   #  98–135°
+    (190, "Verde"),          # 135–190°
+    (225, "Ciano"),          # 190–225°
+    (270, "Azzurro"),        # 225–270°  (azzurro = celeste/cielo)
+    (308, "Blu"),            # 270–308°  (blu puro sRGB ≈ 306°)
+    (325, "Viola"),          # 308–325°
+    (337, "Porpora"),        # 325–337°
+    (360, "Magenta"),        # 337–360°
 ]
 
 def name_from_lab(L, a, b):
@@ -96,8 +103,9 @@ def name_from_lab(L, a, b):
         if L < 40:  return "Grigio scuro"
         return "Grigio"
 
-    # Marrone: hue arancio/giallo + bassa luminanza + cromaticità sufficiente
-    if 20 < h < 76 and L < 46 and C > 10:
+    # Marrone: hue arancio/rosso-arancio + bassa luminanza + cromaticità sufficiente
+    # Soglia bassa (h>15) per catturare anche rosso-arancio scuro
+    if 15 < h < 76 and L < 46 and C > 10:
         return "Marrone"
 
     for thresh, name in _HUE_NAMES:
@@ -206,22 +214,25 @@ def add_labels(ax, cx, cy, name, xy_str, fill_rgb):
 
     W = 0.52   # rapporto larghezza/altezza carattere (font monospace ~0.6, prop ~0.52)
 
-    def fit(text, long_frac, short_frac):
+    def fit(text, long_frac, short_frac, min_pt):
         n = max(len(text), 1)
         f_len  = h_tall * long_frac  * 72 / (n * W)
         f_hgt  = h_wide * short_frac * 72
-        return float(np.clip(min(f_len, f_hgt), 3.5, 15.0))
+        return float(np.clip(min(f_len, f_hgt), min_pt, 15.0))
 
-    fs1 = fit(name,   0.52, 0.38)   # nome: 52% dell'asse lungo, 38% dell'asse corto
-    fs2 = fit(xy_str, 0.48, 0.28)   # coordinate: idem proporzionalmente
+    # Coordinate in formato compatto "0.xx, 0.yy" (2 decimali, meno caratteri)
+    xy_str2 = f"{cx:.2f}, {cy:.2f}"
+
+    fs1 = fit(name,    0.50, 0.40, 6.0)   # nome: min 6pt
+    fs2 = fit(xy_str2, 0.46, 0.30, 5.0)   # coord: min 5pt
 
     lum = 0.299*fill_rgb[0] + 0.587*fill_rgb[1] + 0.114*fill_rgb[2]
     tc = 'white' if lum < 0.46 else 'black'
 
-    off = HEX_R * 0.30   # offset verticale tra le due righe
+    off = HEX_R * 0.36   # offset verticale — abbastanza da separare le due righe
     kw = dict(ha='center', va='center', rotation=90, zorder=4, clip_on=False)
-    ax.text(cx, cy+off, name,   fontsize=fs1, fontweight='bold', color=tc, **kw)
-    ax.text(cx, cy-off, xy_str, fontsize=fs2, color=tc, **kw)
+    ax.text(cx, cy+off, name,    fontsize=fs1, fontweight='bold', color=tc, **kw)
+    ax.text(cx, cy-off, xy_str2, fontsize=fs2, color=tc, **kw)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
